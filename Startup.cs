@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.SpaServices.Webpack;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
+using Vue2Spa.Model;
 
 namespace Vue2Spa
 {
@@ -28,6 +30,13 @@ namespace Vue2Spa
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+
+            services.AddEntityFrameworkNpgsql().AddDbContext<DefaultDbContext>(options =>
+            {
+                options.UseNpgsql(Configuration.GetConnectionString("defaultConnection"));
+                //options.UseOpenIddict();
+            });
+
             // Add framework services.
             services.AddMvc();
         }

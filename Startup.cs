@@ -4,41 +4,87 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.SpaServices.Webpack;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Vue2Spa.Model;
+using System.IdentityModel.Tokens.Jwt;
+using AspNet.Security.OpenIdConnect.Primitives;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace Vue2Spa
 {
     public class Startup
     {
+        public IHostingEnvironment CurrentEnvironment { get; protected set; }
+        public IConfigurationRoot Configuration { get; }
+
         public Startup(IHostingEnvironment env)
         {
+            this.CurrentEnvironment = env;
+
             var builder = new ConfigurationBuilder()
                 .SetBasePath(env.ContentRootPath)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true)
                 .AddEnvironmentVariables();
+
             Configuration = builder.Build();
         }
-
-        public IConfigurationRoot Configuration { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddMvc();
 
-            services.AddEntityFrameworkNpgsql().AddDbContext<DefaultDbContext>(options =>
+            services.AddDbContext<DefaultDbContext>(options =>
             {
-                options.UseNpgsql(Configuration.GetConnectionString("defaultConnection"));
-                //options.UseOpenIddict();
+                // Configure the context to use Microsoft SQL Server.
+                options.UseSqlServer(Configuration["Data:DefaultConnection:ConnectionString"]);
+
+                // Register the entity sets needed by OpenIddict.
+                // Note: use the generic overload if you need
+                // to replace the default OpenIddict entities.
+                options.UseOpenIddict();
             });
 
-            // Add framework services.
-            services.AddMvc();
+            // Configure Entity Framework Identity for Auth
+            services.AddIdentity<ApplicationUser, IdentityRole>()
+                .AddEntityFrameworkStores<DefaultDbContext>()
+                .AddDefaultTokenProviders();
+
+ 
+            // Register the OAuth2 validation handler.
+            services.AddAuthentication()
+                .AddOAuthValidation();
+
+            // Register the OpenIddict services.
+            // Note: use the generic overload if you need
+            // to replace the default OpenIddict entities.
+            services.AddOpenIddict(options =>
+            {
+                // Register the Entity Framework stores.
+                options.AddEntityFrameworkCoreStores<DefaultDbContext>();
+
+                // Register the ASP.NET Core MVC binder used by OpenIddict.
+                // Note: if you don't call this method, you won't be able to
+                // bind OpenIdConnectRequest or OpenIdConnectResponse parameters.
+                options.AddMvcBinders();
+
+                // Enable the token endpoint (required to use the password flow).
+                options.EnableTokenEndpoint("/api/auth/login");
+
+                // Allow client applications to use the grant_type=password flow.
+                options.AllowPasswordFlow();
+
+                // During development, you can disable the HTTPS requirement.
+                options.DisableHttpsRequirement();
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -61,6 +107,8 @@ namespace Vue2Spa
             }
 
             app.UseStaticFiles();
+
+            app.UseAuthentication();
 
             app.UseMvc(routes =>
             {
